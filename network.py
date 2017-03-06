@@ -1,76 +1,98 @@
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-data_dir = '/data/images/'
-chkpt_dir = '/chkpts/'
-lrn_rate = 1e-4
-bth_size = 64
-dataset = 'celeba'
 
 def prelu(_x, name):
-    alphas = tf.get_variable(name,  _x.get_shape()[-1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+    alphas = tf.get_variable(name, _x.get_shape()[-1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
     pos = tf.nn.relu(_x)
-    neg = alphas*(_x - abs(_x)) * 0.5
+    neg = alphas * (_x - abs(_x)) * 0.5
 
     tf.add_to_collection('model_vars', alphas)
 
     return pos + neg
 
 
-def gen(gen_img):
-    gen_img = slim.fully_connected(gen_img, 4 * 4 * 1024, normalizer_fn=slim.batch_norm, activation_fn=tf.identity,
-                                   scope='gen_l1')
-    gen_img = tf.reshape(gen_img, [bth_size, 4, 4, 1024])
+class WGAN:
+    def __init__(self, input_size=100, clip_rate=[-1.0, 1.0], learning_rate=0.03):
+        self.sess = tf.Session()
+        self.build_net(input_size=input_size, clip_rate=clip_rate, learning_rate=learning_rate)
 
-    # Deconv Layer 1 for Generation
+    def generator(self, input_noise):
+        with slim.arg_scope([slim.layers.fully_connected, slim.layers.convolution2d_transpose],
+                            normalizer_fn=slim.batch_norm, activation_fn=tf.identity):
+            net = slim.layers.fully_connected(input_noise, 7 * 7 * 1024,
+                                              scope='gen_l1')
 
-    gen_img = slim.convolution2d_transpose(gen_img, 512, 5, stride=2, normalizer=slim.batch_norm,
-                                           activation_fn=tf.identity, scope='gen_l2')
-    gen_img = prelu(gen_img, 'gen_l2_prelu')
+            net = tf.reshape(net, [-1, 7, 7, 1024])
 
-    # Deconv Layer 2
+            # Deconv Layer 1 for Generation
 
-    gen_img = slim.convolution2d_transpose(gen_img, 256, 5, stride=2, normalizer_fn=slim.batch_norm,
-                                           activation_fn=tf.identity, scope='gen_l3')
-    gen_img = prelu(gen_img, 'gen_l3_prelu')
+            net = slim.layers.convolution2d_transpose(net, 512, 5, stride=2, scope='gen_l2')
+            net = prelu(net, 'gen_l2_prelu')
 
-    # Deconv Layer 3
+            # Deconv Layer 2
 
-    gen_img = slim.convolution2d_transpose(gen_img, 128, 5, stride=2, normalizer_fn=slim.batch_norm,
-                                           activation_fn=tf.identity, scope='gen_l4')
-    gen_img = tf.nn.tanh(gen_img)
-
-    tf.add_to_collection('model_vars', gen_img)
-
-    return gen_img
+            net = slim.layers.convolution2d_transpose(net, 1, 5, stride=2, scope='gen_l3')
 
 
-def cri(input_image, reuse_scope=False):
-    sc = tf.get_variable_scope()
-    with tf.variable_scope(sc, reuse=reuse_scope):
-        # Conv Layer 1
+            net = tf.nn.tanh(net)
 
-        y_hat = slim.convolution(input_image, 64, 5, stride=2, activation_fn=tf.identity, scope='crit_l1')
-        y_hat = prelu(y_hat, 'crit_l1_prelu')
+            tf.add_to_collection('model_vars', net)
 
-        # Conv Layer 2
+            return net
 
-        y_hat = slim.convolution(y_hat, 128, 5, stride=2, normalizer_fn=slim.batch_norm, activation_fn=tf.identity,
-                                 scope='crit_l2')
-        y_hat = prelu(y_hat, 'crit_l2_prelu')
+    def critic(self, input_image, reuse_scope=False):
+        with slim.arg_scope([slim.layers.convolution], activation_fn=tf.identity, reuse=reuse_scope):
+            # Conv Layer 1
 
-        # Conv Layer 3
+            y_hat = slim.layers.convolution(input_image, 64, 5, stride=2, scope='critic_l1')
+            y_hat = prelu(y_hat, 'critic_l1_prelu')
 
-        y_hat = slim.convolution(y_hat, 256, 5, stride=2, normalizer_fn=slim.batch_norm, activation_fn=tf.identity,
-                                 scope='crit_l3')
-        y_hat = prelu(y_hat, 'crit_l3_prelu')
+            # Conv Layer 2
 
-        # Conv Layer 4
+            y_hat = slim.layers.convolution(y_hat, 128, 5, stride=2, normalizer_fn=slim.batch_norm,
+                                            scope='critic_l2')
+            y_hat = prelu(y_hat, 'critic_l2_prelu')
 
-        y_hat = slim.convolution(y_hat, 256, 5, stride=2, normalizer=slim.batch_norm, activation_fn=tf.identity,
-                                 scope='crit_l4')
-        y_hat = slim.convolution(y_hat, 1, 4, stride=2, activation_fn=tf.identity, scope='crit_l5')
+            # Conv Layer 3
 
-        tf.add_to_collection('model_vars', y_hat)
+            y_hat = slim.layers.convolution(y_hat, 256, 5, stride=2, normalizer_fn=slim.batch_norm,
+                                            scope='critic_l3')
+            y_hat = prelu(y_hat, 'critic_l3_prelu')
 
-        return y_hat
+            # Conv Layer 4
+
+            y_hat = slim.layers.convolution(y_hat, 256, 5, stride=2, normalizer_fn=slim.batch_norm, scope='critic_l4')
+
+            y_hat = slim.layers.convolution(y_hat, 1, 4, stride=2, scope='critic_l5')
+
+            tf.add_to_collection('model_vars', y_hat)
+
+            return y_hat
+
+
+    def build_net(self, input_size, clip_rate, learning_rate):
+        self.input_noise = tf.placeholder(tf.float32, shape=[None, input_size], name='input_noise')
+        self.real_images = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='input_images')
+
+        self.generated_MNIST = self.generator(self.input_noise)
+
+        fake_err = self.critic(self.generated_MNIST)
+        real_err = self.critic(self.real_images)
+        critic_err = tf.reduce_mean(real_err-fake_err)
+        gen_err = tf.reduce_mean(fake_err)
+
+        variables = tf.trainable_variables()
+        gen_var = [var for var in variables if 'gen' in var.name]
+        critic_var = [var for var in variables if 'critic' in var.name]
+
+        self.clipper = [var.assign(tf.clip_by_value(var, clip_rate[0], clip_rate[1])) for var in critic_var]
+        self.train_gen = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(gen_err, var_list=gen_var)
+        self.train_critic = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(critic_err, var_list=critic_var)
+
+        self.sess.run(tf.global_variables_initializer())
+
+
+
+
+
