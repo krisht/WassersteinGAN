@@ -39,7 +39,7 @@ class WGAN:
             net = slim.layers.convolution2d_transpose(net, 1, 5, stride=2, scope='gen_l3')
 
 
-            net = tf.nn.sigmoid(net)
+            net = 255*tf.nn.sigmoid(net)
 
             tf.add_to_collection('model_vars', net)
 
@@ -118,7 +118,19 @@ class WGAN:
     #Generates an image
     def generate_image(self, num_images):
         input_noise = np.random.normal(-1.0, 1.0, size=[num_images, self.input_size])
-        return self.sess.run(self.generated_MNIST, feed_dict={self.input_noise:input_noise})
+        output = self.sess.run(self.generated_MNIST, feed_dict={self.input_noise:input_noise})
+        images = []
+        for poopoo in output:
+            image = []
+            for row in poopoo:
+                row_corrected = []
+                for col in row:
+                    row_corrected.append(col[0])
+                image.append(row_corrected)
+            images.append(image)
+        return images
+
+
 
 
 
