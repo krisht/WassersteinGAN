@@ -24,6 +24,12 @@ class WGAN:
         # The output of the transpose convolution is input * stride here
         with slim.arg_scope([slim.layers.fully_connected, slim.layers.convolution2d_transpose],
                             normalizer_fn=slim.batch_norm, activation_fn=tf.identity):
+            bs = tf.shape(input_noise)[0]
+
+            net = slim.layers.fully_connected(input_noise, 1024, weights_regularizer=slim.l2_regularizer(2, 5e-5), activation_fn=tf.identity)
+
+
+
             net = slim.layers.fully_connected(input_noise, 7 * 7 * 24,
                                               scope='gen_l1')
 
@@ -47,32 +53,29 @@ class WGAN:
     # Build critic
     def critic(self, input_image, reuse_scope=False):
         with slim.arg_scope([slim.layers.convolution], activation_fn=tf.identity, reuse=reuse_scope):
-            # Conv Layer 1
 
-            y_hat = slim.layers.convolution(input_image, 64, 5, stride=2, scope='critic_l1')
-            y_hat = prelu(y_hat, 'critic_l1', reuse_scope=reuse_scope)
+            bs = tf.shape(input_image)[0]
+            x = tf.reshape(x, [bs, 28, 28, 1])
 
-            # Conv Layer 2
+            yhat = slim.layers.convolution2d(x, 64, [4,4], [2,2], activation_fn=tf.identity)
 
-            y_hat = slim.layers.convolution(y_hat, 128, 5, stride=2, normalizer_fn=slim.batch_norm,
-                                            scope='critic_l2')
-            y_hat = prelu(y_hat, 'critic_l2', reuse_scope=reuse_scope)
+            yhat = prelu(yhat, "crit_prelu_1")
 
-            # Conv Layer 3
+            yhat = slim.layers.convolution2d(yhat, 128, [4,4], [2,2], activation_fn=tf.identity)
 
-            y_hat = slim.layers.convolution(y_hat, 256, 5, stride=2, normalizer_fn=slim.batch_norm,
-                                            scope='critic_l3')
-            y_hat = prelu(y_hat, 'critic_l3', reuse_scope=reuse_scope)
+            yhat = prelu(yhat, "crit_prelu_2")
 
-            # Conv Layer 4
+            yhat = slim.layers.flatten(yhat)
 
-            y_hat = slim.layers.convolution(y_hat, 256, 5, stride=2, normalizer_fn=slim.batch_norm, scope='critic_l4')
+            yhat = slim.layers.fully_connected(yhat, 1024, activation_fn=tf.identity)
 
-            y_hat = slim.layers.convolution(y_hat, 1, 4, stride=2, scope='critic_l5')
+            yhat = prelu(yhat, "crit_prelu_3")
 
-            tf.add_to_collection('model_vars', y_hat)
+            yhat = slim.layers.fully_connected(yhat, 1, activation_fn=tf.identity)
 
-            return y_hat
+            tf.add_to_collection('model_vars', yhat)
+
+            return yhat
 
     # Sets up the training
     def build_net(self, input_size, clip_rate, learning_rate):
