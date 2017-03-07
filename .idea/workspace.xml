@@ -35,8 +35,8 @@
       <file leaf-file-name="WGAN.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/secondary/WGAN.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="422">
-              <caret line="38" column="40" lean-forward="true" selection-start-line="38" selection-start-column="40" selection-end-line="38" selection-end-column="40" />
+            <state relative-caret-position="165">
+              <caret line="11" column="47" lean-forward="false" selection-start-line="11" selection-start-column="47" selection-end-line="11" selection-end-column="47" />
               <folding>
                 <element signature="e#0#23#0" expanded="true" />
               </folding>
@@ -72,6 +72,7 @@
       <find>relu</find>
       <find>images</find>
       <find>print</find>
+      <find>nEpoch</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -389,7 +390,14 @@
       <option name="project" value="LOCAL" />
       <updated>1488916483567</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="Not working yet">
+      <created>1488917212647</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1488917212647</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TodoView">
@@ -677,8 +685,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/secondary/WGAN.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="422">
-          <caret line="38" column="40" lean-forward="true" selection-start-line="38" selection-start-column="40" selection-end-line="38" selection-end-column="40" />
+        <state relative-caret-position="165">
+          <caret line="11" column="47" lean-forward="false" selection-start-line="11" selection-start-column="47" selection-end-line="11" selection-end-column="47" />
           <folding>
             <element signature="e#0#23#0" expanded="true" />
           </folding>
