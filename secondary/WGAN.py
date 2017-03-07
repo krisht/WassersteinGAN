@@ -130,15 +130,25 @@ class WGAN(object):
         get_loss(self.crit_loss_arr, self.gen_loss_arr)
 
     def generator(self, z):
-        # Generator Model
-        g_prob = 1
+        G_W1 = def_weight([self.output_dims, 128], 'g_w1', 'gen_vars')
+        G_b1 = def_bias([128], 'g_b1', 'gen_vars')
+
+        G_W2 = def_weight([128, self.input_dims], 'g_w2', 'gen_vars')
+        G_b2 = def_bias([self.input], 'g_b2', 'gen_vars')
+
+        G_h1 = tf.nn.relu(tf.matmul(z, G_W1) + G_b1)
+        G_log_prob = tf.matmul(G_h1, G_W2) + G_b2
+        g_prob = tf.nn.sigmoid(G_log_prob)
         return g_prob
 
     def critic(self, x):
-        # Critic model
-        out = 1
+        D_W1 = def_weight([self.output_dims, 128], 'd_w1', 'crit_vars')
+        D_b1 = def_bias([128], 'd_b1', 'crit_vars')
+        D_W2 = def_weight([128,1], 'd_b1', 'crit_vars')
+        D_b2 = def_bias([1], 'd_b2', 'crit_vars')
+        D_h1 = tf.nn.relu(tf.matmul(x, D_W1) + D_b1)
+        out = tf.matmul(D_h1, D_W2) + D_b2
         return out
-
 
 
 sess = tf.Session()
