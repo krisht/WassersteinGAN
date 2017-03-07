@@ -24,21 +24,21 @@ class WGAN:
         # The output of the transpose convolution is input * stride here
         with slim.arg_scope([slim.layers.fully_connected, slim.layers.convolution2d_transpose],
                             normalizer_fn=slim.batch_norm, activation_fn=tf.identity):
-            net = slim.layers.fully_connected(input_noise, 7 * 7 * 1024,
+            net = slim.layers.fully_connected(input_noise, 7 * 7 * 24,
                                               scope='gen_l1')
 
-            net = tf.reshape(net, [-1, 7, 7, 1024])
+            net = tf.reshape(net, [-1, 7, 7, 24])
 
             # Deconv Layer 1 for Generation
 
-            net = slim.layers.convolution2d_transpose(net, 512, 5, stride=2, scope='gen_l2')
+            net = slim.layers.convolution2d_transpose(net, 40, 5, stride=2, scope='gen_l2')
             net = prelu(net, 'gen_l2')
 
             # Deconv Layer 2
 
             net = slim.layers.convolution2d_transpose(net, 1, 5, stride=2, scope='gen_l3')
 
-            net = 255 * tf.nn.sigmoid(net)
+            net = 255*tf.nn.sigmoid(net)
 
             tf.add_to_collection('model_vars', net)
 
