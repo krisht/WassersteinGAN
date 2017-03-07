@@ -20,6 +20,22 @@ def def_bias(shape, name, coll_name):
     return var
 
 
+def get_loss(crit_loss, gen_loss):
+    plt.figure(1)
+    plt.subplot(211)
+    plt.plot(crit_loss, 'r--')
+    plt.xlabel("Iterations")
+    plt.ylabel("Critic Loss")
+    plt.title("Iterations vs. Critic Loss")
+    plt.subplot(212)
+    plt.plot(gen_loss, 'g--')
+    plt.xlabel("Iterations")
+    plt.ylabel("Generator Loss")
+    plt.title("Iterations vs. Generator Loss")
+    plt.tight_layout()
+    plt.show()
+
+
 def get_samples(samples):
     fig = plt.figure(figsize=(4, 4))
     gs = gridspec.GridSpec(4, 4)
@@ -94,7 +110,8 @@ class WGAN(object):
                                                                                                     self.output_dims)})
 
             _, self.temp_gen_loss, _ = self.sess.run([self.gen_optim, self.gen_loss],
-                                                     feed_dict={self.output: random_noise(self.batch_size, self.output_dims)})
+                                                     feed_dict={self.output: random_noise(self.batch_size,
+                                                                                          self.output_dims)})
             self.crit_loss_arr.append(self.temp_crit_loss)
             self.gen_loss_arr.append(self.temp_gen_loss)
 
@@ -110,8 +127,7 @@ class WGAN(object):
                     kk += 1
                     plt.close(fig)
 
-        print(self.crit_loss_arr)
-        print(self.gen_loss_arr)
+        get_loss(self.crit_loss_arr, self.gen_loss_arr)
 
     def generator(self, z):
         # Generator Model
@@ -124,7 +140,7 @@ class WGAN(object):
         return out
 
 
-if __name__ == "__main__":
-    sess = tf.Session()
-    model = WGAN(sess=sess)
-    model.train()
+
+sess = tf.Session()
+model = WGAN(sess=sess)
+model.train()
