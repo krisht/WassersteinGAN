@@ -23,26 +23,15 @@ class WGAN:
     def generator(self, input_noise):
         # The output of the transpose convolution is input * stride here
         with slim.arg_scope([slim.layers.fully_connected, slim.layers.convolution2d_transpose],
-                            normalizer_fn=slim.batch_norm, activation_fn=tf.identity):
-            bs = tf.shape(input_noise)[0]
-
-            net = slim.layers.fully_connected(input_noise, 1024, weights_regularizer=slim.l2_regularizer(2, 5e-5), activation_fn=tf.identity)
-
-
+                            normalizer_fn=slim.batch_norm, activation_fn=tf.nn.relu):
 
             net = slim.layers.fully_connected(input_noise, 7 * 7 * 24,
                                               scope='gen_l1')
+            net = slim.layers.fully_connected(net, 784, scope='gen_l2')
 
-            net = tf.reshape(net, [-1, 7, 7, 24])
 
-            # Deconv Layer 1 for Generation
 
-            net = slim.layers.convolution2d_transpose(net, 40, 5, stride=2, scope='gen_l2')
-            net = prelu(net, 'gen_l2')
-
-            # Deconv Layer 2
-
-            net = slim.layers.convolution2d_transpose(net, 1, 5, stride=2, scope='gen_l3')
+            net = tf.reshape(net, [-1, 28, 28, 1])
 
             net = 255*tf.nn.sigmoid(net)
 
@@ -52,30 +41,24 @@ class WGAN:
 
     # Build critic
     def critic(self, input_image, reuse_scope=False):
-        with slim.arg_scope([slim.layers.convolution], activation_fn=tf.identity, reuse=reuse_scope):
+        with slim.arg_scope([slim.layers.fully_connected], activation_fn=tf.nn.relu, reuse=reuse_scope):
+            # Conv Layer 1
 
-            bs = tf.shape(input_image)[0]
-            x = tf.reshape(x, [bs, 28, 28, 1])
+            net = slim.layers.convolution(input_image, 20, 3, stride=1, scope='critic_l1')
 
-            yhat = slim.layers.convolution2d(x, 64, [4,4], [2,2], activation_fn=tf.identity)
+            net = slim.layers.convolution(net, 40, 3, stride=1, scope='critic_l2')
 
-            yhat = prelu(yhat, "crit_prelu_1")
+            # Conv Layer 2
 
-            yhat = slim.layers.convolution2d(yhat, 128, [4,4], [2,2], activation_fn=tf.identity)
+            net = slim.layers.flatten(net)
 
-            yhat = prelu(yhat, "crit_prelu_2")
+            net = slim.layers.fully_connected(net, 100, scope='critic_l3')
 
-            yhat = slim.layers.flatten(yhat)
+            net = slim.layers.fully_connected(net, 10, scope='critic_l4')
 
-            yhat = slim.layers.fully_connected(yhat, 1024, activation_fn=tf.identity)
+            tf.add_to_collection('model_vars', net)
 
-            yhat = prelu(yhat, "crit_prelu_3")
-
-            yhat = slim.layers.fully_connected(yhat, 1, activation_fn=tf.identity)
-
-            tf.add_to_collection('model_vars', yhat)
-
-            return yhat
+            return net
 
     # Sets up the training
     def build_net(self, input_size, clip_rate, learning_rate):
@@ -109,15 +92,16 @@ class WGAN:
     # Train a single iteration
     def train_iteration(self, critic_loops, images):
         # Train critic first
+        critic_loss = 0
         batch_size = len(images)
         for critic_epoch in range(critic_loops):
             input_noise = np.random.uniform(-1.0, 1.0, size=[batch_size, self.input_size])
-            self.sess.run(self.train_critic, feed_dict={self.input_noise: input_noise, self.real_images: images})
+            critic_loss = self.sess.run(self.train_critic, feed_dict={self.input_noise: input_noise, self.real_images: images})
             self.sess.run(self.clipper)
 
         # train generator
         input_noise = np.random.normal(-1.0, 1.0, size=[batch_size, self.input_size])
-        self.sess.run(self.train_gen, feed_dict={self.input_noise: input_noise})
+        return critic_loss, self.sess.run(self.train_gen, feed_dict={self.input_noise: input_noise})
 
     # Generates an image
     def generate_image(self, num_images):

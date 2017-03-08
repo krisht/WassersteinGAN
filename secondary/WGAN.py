@@ -58,7 +58,7 @@ def random_noise(m, n):
 
 class WGAN(object):
     def __init__(self, sess,
-                 l_rate=1e-4,
+                 l_rate=5e-5,
                  n_iter=1000000,
                  batch_size=100,
                  input_dims=784,
@@ -109,7 +109,7 @@ class WGAN(object):
                                                                      self.output: random_noise(self.batch_size,
                                                                                                     self.output_dims)})
 
-            _, self.temp_gen_loss, _ = self.sess.run([self.gen_optim, self.gen_loss],
+            _, self.temp_gen_loss= self.sess.run([self.gen_optim, self.gen_loss],
                                                      feed_dict={self.output: random_noise(self.batch_size,
                                                                                           self.output_dims)})
             self.crit_loss_arr.append(self.temp_crit_loss)

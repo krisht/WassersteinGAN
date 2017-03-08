@@ -1,46 +1,26 @@
 from network import WGAN
+from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
 import numpy as np
-from scipy.misc import imsave, imshow
-from tensorflow.examples.tutorials.mnist import input_data
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import warnings
+import random
+from scipy.misc import imsave
 
-warnings.filterwarnings('ignore')
+mnist = read_data_sets("mnist_data/", one_hot=True)
+train = mnist[0]
+validate = mnist[1]
+test = mnist[2]
 
-mnist = input_data.read_data_sets("data/", one_hot=True)
+poopoo_images = np.concatenate((train.images, validate.images, test.images))
 
-test = WGAN()
+epochs = 6000
+batch_size = 256
+test = WGAN(clip_rate=[-0.5, 0.5])
+images = [np.reshape(x, newshape=[28,28,1]) for x in poopoo_images]
 
-def plot(samples):
-    fig = plt.figure(figsize=(4, 4))
-    gs = gridspec.GridSpec(4, 4)
-    gs.update(wspace=0.05, hspace=0.05)
+for epoch in range(1, epochs+1):
+    print("Epoch " + str(epoch))
+    sample = random.sample(images, batch_size)
+    test.train_iteration(5, sample)
 
-    for i, sample in enumerate(samples):
-        ax = plt.subplot(gs[i])
-        plt.axis('off')
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-        ax.set_aspect('equal')
-        plt.imshow(sample.reshape(28, 28), cmap='Greys_r')
-
-    return fig
-
-
-def train(nEpoch, batch_size):
-    for kk in range(nEpoch):
-        print("Epoch:", kk)
-        for samp in range(int(500/batch_size)):
-            images, _  = mnist.train.next_batch(batch_size)
-            images = images.reshape((batch_size, 28, 28, 1))
-            test.train_iteration(10, images)
-        samples = np.array(test.generate_image(16))
-        fig = plot(samples)
-        plt.savefig("{}.png".format(str(kk).zfill(3)), bbox_inches='tight')
-        plt.close(fig)
-
-
-train(50, 10)
-
-
+result = test.generate_image(10)
+for image, number in zip(result, range(10)):
+    imsave("out" + str(number), image, 'JPEG')
