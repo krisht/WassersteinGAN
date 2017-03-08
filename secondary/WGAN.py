@@ -8,16 +8,18 @@ import os
 mnist = input_data.read_data_sets('../data/', one_hot=True)
 
 
-def def_weight(shape, name, coll_name):
-    var = tf.get_variable(name=name, dtype=tf.float32, shape=shape, initializer=tf.contrib.layers.xavier_initializer())
-    tf.add_to_collection(coll_name, var)
-    return var
+def def_weight(shape, name, coll_name, reuse_scope=True):
+    with tf.variable_scope('weights', reuse=reuse_scope):
+        var = tf.get_variable(name=name, dtype=tf.float32, shape=shape, initializer=tf.contrib.layers.xavier_initializer())
+        tf.add_to_collection(coll_name, var)
+        return var
 
 
-def def_bias(shape, name, coll_name):
-    var = tf.get_variable(name=name, dtype=tf.float32, shape=shape, initializer=tf.constant_initializer(0.0))
-    tf.add_to_collection(coll_name, var)
-    return var
+def def_bias(shape, name, coll_name, reuse_scope=True):
+    with tf.variable_scope('biases', reuse=reuse_scope):
+        var = tf.get_variable(name=name, dtype=tf.float32, shape=shape, initializer=tf.constant_initializer(0.0))
+        tf.add_to_collection(coll_name, var)
+        return var
 
 
 def get_loss(crit_loss, gen_loss):
@@ -58,7 +60,7 @@ def random_noise(m, n):
 
 class WGAN(object):
     def __init__(self, sess,
-                 l_rate=5e-5,
+                 l_rate=1e-4,
                  n_iter=1000000,
                  batch_size=100,
                  input_dims=784,
@@ -80,17 +82,18 @@ class WGAN(object):
         # Build Model
 
         self.gen_sample = self.generator(self.output)
-        self.crit_real = self.critic(self.input, "real")
-        self.crit_fake = self.critic(self.gen_sample, "fake")
+        self.crit_real = self.critic(self.input)
+        self.crit_fake = self.critic(self.gen_sample, reuse_scope=True)
 
         self.crit_loss = tf.reduce_mean(self.crit_real) - tf.reduce_mean(self.crit_fake)
         self.gen_loss = -tf.reduce_mean(self.crit_fake)
 
         self.crit_optim = (tf.train.RMSPropOptimizer(learning_rate=self.l_rate)) \
             .minimize(-self.crit_loss, var_list=tf.get_collection('crit_vars'))
+        test = tf.get_collection('gen_vars')
+        test2 = tf.get_collection('crit_vars')
         self.gen_optim = (tf.train.RMSPropOptimizer(learning_rate=self.l_rate)) \
             .minimize(self.gen_loss, var_list=tf.get_collection('gen_vars'))
-
         self.crit_clipper = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in tf.get_collection('crit_vars')]
 
         self.temp_crit_loss = 0
@@ -130,22 +133,22 @@ class WGAN(object):
         get_loss(self.crit_loss_arr, self.gen_loss_arr)
 
     def generator(self, z):
-        G_W1 = def_weight([self.output_dims, 128], 'g_w1', 'gen_vars')
-        G_b1 = def_bias([128], 'g_b1', 'gen_vars')
+        G_W1 = def_weight([self.output_dims, 128], 'g_w1', 'gen_vars', reuse_scope=False)
+        G_b1 = def_bias([128], 'g_b1', 'gen_vars', reuse_scope=False)
 
-        G_W2 = def_weight([128, self.input_dims], 'g_w2', 'gen_vars')
-        G_b2 = def_bias([self.input_dims], 'g_b2', 'gen_vars')
+        G_W2 = def_weight([128, self.input_dims], 'g_w2', 'gen_vars', reuse_scope=False)
+        G_b2 = def_bias([self.input_dims], 'g_b2', 'gen_vars', reuse_scope=False)
 
         G_h1 = tf.nn.relu(tf.matmul(z, G_W1) + G_b1)
         G_log_prob = tf.matmul(G_h1, G_W2) + G_b2
         g_prob = tf.nn.sigmoid(G_log_prob)
         return g_prob
 
-    def critic(self, x, s):
-        D_W1 = def_weight([self.input_dims, 128], 'd_w1'+s, 'crit_vars')
-        D_b1 = def_bias([128], 'd_b1'+s, 'crit_vars')
-        D_W2 = def_weight([128,1], 'd_w2'+s, 'crit_vars')
-        D_b2 = def_bias([1], 'd_b2'+s, 'crit_vars')
+    def critic(self, x, reuse_scope=False):
+        D_W1 = def_weight([self.input_dims, 128], 'd_w1', 'crit_vars', reuse_scope=reuse_scope)
+        D_b1 = def_bias([128], 'd_b1', 'crit_vars', reuse_scope=reuse_scope)
+        D_W2 = def_weight([128,1], 'd_w2', 'crit_vars', reuse_scope=reuse_scope)
+        D_b2 = def_bias([1], 'd_b2', 'crit_vars', reuse_scope=reuse_scope)
         D_h1 = tf.nn.relu(tf.matmul(x, D_W1) + D_b1)
         out = tf.matmul(D_h1, D_W2) + D_b2
         return out
