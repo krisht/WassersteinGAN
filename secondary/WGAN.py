@@ -7,6 +7,9 @@ import os
 
 mnist = input_data.read_data_sets('../data/', one_hot=True)
 
+crit_loss_arr = []
+gen_loss_arr = []
+
 
 def def_weight(shape, name, coll_name, reuse_scope=True):
     with tf.variable_scope('weights', reuse=reuse_scope):
@@ -20,6 +23,16 @@ def def_bias(shape, name, coll_name, reuse_scope=True):
         var = tf.get_variable(name=name, dtype=tf.float32, shape=shape, initializer=tf.constant_initializer(0.0))
         tf.add_to_collection(coll_name, var)
         return var
+
+def prelu(_x, name, reuse_scope=False):
+    with tf.variable_scope('prelu', reuse=reuse_scope):
+        alphas = tf.get_variable(name, _x.get_shape()[-1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+        pos = tf.nn.relu(_x)
+        neg = alphas * (_x - abs(_x)) * 0.5
+
+        tf.add_to_collection('model_vars', alphas)
+
+        return pos + neg
 
 
 def get_loss(crit_loss, gen_loss):
@@ -55,14 +68,14 @@ def get_samples(samples):
 
 
 def random_noise(m, n):
-    return np.random.uniform(-1, 1, size=[m, n])
+    return np.random.uniform(0, 1, size=[m, n])
 
 
 class WGAN(object):
     def __init__(self, sess,
                  l_rate=1e-4,
                  n_iter=1000000,
-                 batch_size=100,
+                 batch_size=16,
                  input_dims=784,
                  output_dims=10,
                  crit_train=5):
@@ -76,8 +89,7 @@ class WGAN(object):
         self.output = tf.placeholder(tf.float32, shape=[None, self.output_dims])
         self.l_rate = l_rate
 
-        self.crit_loss_arr = []
-        self.gen_loss_arr = []
+
 
         # Build Model
 
@@ -90,8 +102,6 @@ class WGAN(object):
 
         self.crit_optim = (tf.train.RMSPropOptimizer(learning_rate=self.l_rate)) \
             .minimize(-self.crit_loss, var_list=tf.get_collection('crit_vars'))
-        test = tf.get_collection('gen_vars')
-        test2 = tf.get_collection('crit_vars')
         self.gen_optim = (tf.train.RMSPropOptimizer(learning_rate=self.l_rate)) \
             .minimize(self.gen_loss, var_list=tf.get_collection('gen_vars'))
         self.crit_clipper = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in tf.get_collection('crit_vars')]
@@ -115,11 +125,11 @@ class WGAN(object):
             _, self.temp_gen_loss= self.sess.run([self.gen_optim, self.gen_loss],
                                                      feed_dict={self.output: random_noise(self.batch_size,
                                                                                           self.output_dims)})
-            self.crit_loss_arr.append(self.temp_crit_loss)
-            self.gen_loss_arr.append(self.temp_gen_loss)
+            crit_loss_arr.append(self.temp_crit_loss)
+            gen_loss_arr.append(self.temp_gen_loss)
 
             if epoch % 100 == 0:
-                print("Epoch: {}, Critic Loss: {:0.5}, Gen Loss: {:0.5}".format(epoch, self.temp_crit_loss,
+                print("Epoch: {:5}, Critic Loss: {:5.5}, Gen Loss: {:5.5}".format(epoch, self.temp_crit_loss,
                                                                                 self.temp_gen_loss))
 
                 if epoch % 1000 == 0:
@@ -130,8 +140,6 @@ class WGAN(object):
                     kk += 1
                     plt.close(fig)
 
-        get_loss(self.crit_loss_arr, self.gen_loss_arr)
-
     def generator(self, z):
         G_W1 = def_weight([self.output_dims, 128], 'g_w1', 'gen_vars', reuse_scope=False)
         G_b1 = def_bias([128], 'g_b1', 'gen_vars', reuse_scope=False)
@@ -139,7 +147,7 @@ class WGAN(object):
         G_W2 = def_weight([128, self.input_dims], 'g_w2', 'gen_vars', reuse_scope=False)
         G_b2 = def_bias([self.input_dims], 'g_b2', 'gen_vars', reuse_scope=False)
 
-        G_h1 = tf.nn.relu(tf.matmul(z, G_W1) + G_b1)
+        G_h1 = prelu(tf.matmul(z, G_W1) + G_b1, 'prelu1')
         G_log_prob = tf.matmul(G_h1, G_W2) + G_b2
         g_prob = tf.nn.sigmoid(G_log_prob)
         return g_prob
@@ -149,11 +157,19 @@ class WGAN(object):
         D_b1 = def_bias([128], 'd_b1', 'crit_vars', reuse_scope=reuse_scope)
         D_W2 = def_weight([128,1], 'd_w2', 'crit_vars', reuse_scope=reuse_scope)
         D_b2 = def_bias([1], 'd_b2', 'crit_vars', reuse_scope=reuse_scope)
-        D_h1 = tf.nn.relu(tf.matmul(x, D_W1) + D_b1)
+        D_h1 = prelu(tf.matmul(x, D_W1) + D_b1, 'prelu2', reuse_scope=reuse_scope)
         out = tf.matmul(D_h1, D_W2) + D_b2
         return out
 
 
-sess = tf.Session()
-model = WGAN(sess=sess)
-model.train()
+try:
+    sess = tf.Session()
+    model = WGAN(sess=sess)
+    model.train()
+except:
+    get_loss(crit_loss_arr, gen_loss_arr)
+
+
+
+
+
