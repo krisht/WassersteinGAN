@@ -9,6 +9,7 @@ mnist = input_data.read_data_sets('../data/', one_hot=True)
 
 crit_loss_arr = []
 gen_loss_arr = []
+pic_samples = 4
 
 
 def def_weight(shape, name, coll_name, reuse_scope=True):
@@ -52,8 +53,8 @@ def get_loss(crit_loss, gen_loss):
 
 
 def get_samples(samples):
-    fig = plt.figure(figsize=(4, 4))
-    gs = gridspec.GridSpec(4, 4)
+    fig = plt.figure(figsize=(pic_samples, pic_samples))
+    gs = gridspec.GridSpec(pic_samples, pic_samples)
     gs.update(wspace=0.05, hspace=0.05)
 
     for i, sample in enumerate(samples):
@@ -68,28 +69,30 @@ def get_samples(samples):
 
 
 def random_noise(m, n):
-    return np.random.uniform(0, 1, size=[m, n])
+    return np.random.uniform(-1, 1, size=[m, n])
 
 
 class WGAN(object):
     def __init__(self, sess,
                  l_rate=1e-4,
-                 n_iter=1000000,
+                 n_iter=100000,
                  batch_size=16,
                  input_dims=784,
                  output_dims=10,
-                 crit_train=5):
+                 crit_train=5,
+                 clip_val = 0.01,
+                 pic_samples=3):
         self.n_iter = n_iter
         self.crit_train = crit_train
         self.sess = sess
         self.batch_size = batch_size
         self.input_dims = input_dims
         self.output_dims = output_dims
+        self.pic_samples = pic_samples
+        self.clip_val = clip_val
         self.input = tf.placeholder(tf.float32, shape=[None, self.input_dims])
         self.output = tf.placeholder(tf.float32, shape=[None, self.output_dims])
         self.l_rate = l_rate
-
-
 
         # Build Model
 
@@ -109,67 +112,78 @@ class WGAN(object):
         self.temp_crit_loss = 0
         self.temp_gen_loss = 0
 
-    def train(self):
-        self.sess.run(tf.global_variables_initializer())
-        if not os.path.exists('out/'):
-            os.makedirs('out/')
+    def wasserstein_algorithm(self):
         kk = 0
-        for epoch in range(self.n_iter):
+        for iterr in range(self.n_iter):
             for _ in range(self.crit_train):
-                x, _ = mnist.train.next_batch(self.batch_size)
+                samples, _ = mnist.train.next_batch(self.batch_size)
                 _, self.temp_crit_loss, _ = self.sess.run([self.crit_optim, self.crit_loss, self.crit_clipper],
-                                                          feed_dict={self.input: x,
+                                                          feed_dict={self.input: samples,
                                                                      self.output: random_noise(self.batch_size,
-                                                                                                    self.output_dims)})
-
-            _, self.temp_gen_loss= self.sess.run([self.gen_optim, self.gen_loss],
-                                                     feed_dict={self.output: random_noise(self.batch_size,
-                                                                                          self.output_dims)})
+                                                                                               self.output_dims)})
+            _, self.temp_gen_loss = self.sess.run([self.gen_optim, self.gen_loss],
+                                                  feed_dict={self.output: random_noise(self.batch_size,
+                                                                                       self.output_dims)})
             crit_loss_arr.append(self.temp_crit_loss)
             gen_loss_arr.append(self.temp_gen_loss)
 
-            if epoch % 100 == 0:
-                print("Epoch: {:5}, Critic Loss: {:5.5}, Gen Loss: {:5.5}".format(epoch, self.temp_crit_loss,
-                                                                                self.temp_gen_loss))
-
-                if epoch % 1000 == 0:
+            if iterr % 100 == 0:
+                print("Iteration: {:5}, Critic Loss: {:5.5}, Gen Loss: {:5.5}".format(iterr, self.temp_crit_loss,
+                                                                                      self.temp_gen_loss))
+                if iterr % 1000 == 0:
                     samples = self.sess.run(self.gen_sample,
-                                            feed_dict={self.output: random_noise(16, self.output_dims)})
+                                            feed_dict={self.output: random_noise(self.pic_samples**2,
+                                                                                 self.output_dims)})
                     fig = get_samples(samples)
-                    plt.savefig('out/{}.png'.format(str(kk).zfill(3)), bbox_inches='tight')
+                    plt.savefig('outputs/{}.png'.format(str(kk).zfill(3)), bbox_inches='tight')
                     kk += 1
                     plt.close(fig)
+
+    def train(self):
+        self.sess.run(tf.global_variables_initializer())
+        if not os.path.exists('outputs/'):
+            os.makedirs('outputs/')
+        self.wasserstein_algorithm()
 
     def generator(self, z):
         G_W1 = def_weight([self.output_dims, 128], 'g_w1', 'gen_vars', reuse_scope=False)
         G_b1 = def_bias([128], 'g_b1', 'gen_vars', reuse_scope=False)
 
-        G_W2 = def_weight([128, self.input_dims], 'g_w2', 'gen_vars', reuse_scope=False)
-        G_b2 = def_bias([self.input_dims], 'g_b2', 'gen_vars', reuse_scope=False)
+        G_l1 = prelu(tf.matmul(z, G_W1) + G_b1, 'prelu1')
 
-        G_h1 = prelu(tf.matmul(z, G_W1) + G_b1, 'prelu1')
-        G_log_prob = tf.matmul(G_h1, G_W2) + G_b2
+        G_W2 = def_weight([128, 256], 'g_w2', 'gen_vars', reuse_scope=False)
+        G_b2 = def_bias([256], 'g_b2', 'gen_vars', reuse_scope=False)
+
+        G_l2 = prelu(tf.matmul(G_l1, G_W2) + G_b2, 'prelu2')
+
+        G_W3 = def_weight([256, self.input_dims], 'g_w3', 'gen_vars', reuse_scope=False)
+        G_b3 = def_bias([self.input_dims], 'g_b3', 'gen_vars', reuse_scope=False)
+
+        G_log_prob = tf.matmul(G_l2, G_W3) + G_b3
         g_prob = tf.nn.sigmoid(G_log_prob)
         return g_prob
 
     def critic(self, x, reuse_scope=False):
         D_W1 = def_weight([self.input_dims, 128], 'd_w1', 'crit_vars', reuse_scope=reuse_scope)
         D_b1 = def_bias([128], 'd_b1', 'crit_vars', reuse_scope=reuse_scope)
-        D_W2 = def_weight([128,1], 'd_w2', 'crit_vars', reuse_scope=reuse_scope)
-        D_b2 = def_bias([1], 'd_b2', 'crit_vars', reuse_scope=reuse_scope)
-        D_h1 = prelu(tf.matmul(x, D_W1) + D_b1, 'prelu2', reuse_scope=reuse_scope)
-        out = tf.matmul(D_h1, D_W2) + D_b2
+
+        D_l1 = prelu(tf.matmul(x, D_W1) + D_b1, 'prelu3', reuse_scope=reuse_scope)
+
+        D_W2 = def_weight([128, 256], 'd_w2', 'crit_vars', reuse_scope=reuse_scope)
+        D_b2 = def_weight([256], 'd_b2', 'crit_vars', reuse_scope=reuse_scope)
+
+        D_l2 = prelu(tf.matmul(D_l1, D_W2) + D_b2, 'prelu4', reuse_scope=reuse_scope)
+
+        D_W3 = def_weight([256, 1], 'd_w3', 'crit_vars', reuse_scope=reuse_scope)
+        D_b3 = def_weight([1], 'd_b3', 'crit_vars', reuse_scope=reuse_scope)
+
+        out = tf.matmul(D_l2, D_W3) + D_b3
         return out
 
 
 try:
     sess = tf.Session()
-    model = WGAN(sess=sess)
+    model = WGAN(sess=sess, pic_samples=pic_samples)
     model.train()
-except:
+except (KeyboardInterrupt, SystemExit, SystemError):
     get_loss(crit_loss_arr, gen_loss_arr)
-
-
-
-
-
