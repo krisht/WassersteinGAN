@@ -3,61 +3,28 @@ import tensorflow.contrib.slim as slim
 import numpy as np
 
 
-def prelu(_x, name, reuse_scope=False):
-    with tf.variable_scope('prelu', reuse=reuse_scope):
-        alphas = tf.get_variable(name, _x.get_shape()[-1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
-        pos = tf.nn.relu(_x)
-        neg = alphas * (_x - abs(_x)) * 0.5
-
-        tf.add_to_collection('model_vars', alphas)
-
-        return pos + neg
-
-
 class WGAN:
-    def __init__(self, input_size=100, clip_rate=[-1.0, 1.0], learning_rate=5e-5):
+    def __init__(self, input_size=10, clip_rate=[-0.01, 0.01], learning_rate=1e-4):
         self.sess = tf.Session()
         self.build_net(input_size=input_size, clip_rate=clip_rate, learning_rate=learning_rate)
 
     # Build the generator
     def generator(self, input_noise):
-        # The output of the transpose convolution is input * stride here
-        with slim.arg_scope([slim.layers.fully_connected, slim.layers.convolution2d_transpose],
-                            normalizer_fn=slim.batch_norm, activation_fn=tf.nn.relu):
-
-            net = slim.layers.fully_connected(input_noise, 7 * 7 * 24,
-                                              scope='gen_l1')
-            net = slim.layers.fully_connected(net, 784, scope='gen_l2')
-
-
-
+        with slim.arg_scope([slim.layers.fully_connected], biases_initializer=tf.constant_initializer(0),
+                            activation_fn=None, weights_initializer=tf.contrib.layers.xavier_initializer()):
+            net = slim.layers.fully_connected(input_noise, 128, scope='gen_l1', activation_fn=tf.nn.relu)
+            net = slim.layers.fully_connected(net, 784, scope='gen_l2', activation_fn=tf.nn.sigmoid)
             net = tf.reshape(net, [-1, 28, 28, 1])
-
-            net = 255*tf.nn.sigmoid(net)
-
-            tf.add_to_collection('model_vars', net)
 
             return net
 
     # Build critic
     def critic(self, input_image, reuse_scope=False):
-        with slim.arg_scope([slim.layers.fully_connected], activation_fn=tf.nn.relu, reuse=reuse_scope):
-            # Conv Layer 1
-
-            net = slim.layers.convolution(input_image, 20, 3, stride=1, scope='critic_l1')
-
-            net = slim.layers.convolution(net, 40, 3, stride=1, scope='critic_l2')
-
-            # Conv Layer 2
-
-            net = slim.layers.flatten(net)
-
-            net = slim.layers.fully_connected(net, 100, scope='critic_l3')
-
-            net = slim.layers.fully_connected(net, 10, scope='critic_l4')
-
-            tf.add_to_collection('model_vars', net)
-
+        with slim.arg_scope([slim.layers.fully_connected], biases_initializer=tf.constant_initializer(0),
+                            activation_fn=None, reuse=reuse_scope, weights_initializer=tf.contrib.layers.xavier_initializer()):
+            net = slim.flatten(input_image)
+            net = slim.layers.fully_connected(net, 128, scope='critic_l1', activation_fn=tf.nn.relu)
+            net = slim.layers.fully_connected(net, 1, scope='critic_l2')
             return net
 
     # Sets up the training
@@ -71,10 +38,10 @@ class WGAN:
         self.generated_MNIST = self.generator(self.input_noise)
 
         # Error values
-        fake_err = self.critic(self.generated_MNIST)
-        real_err = self.critic(self.real_images, reuse_scope=True)
-        critic_err = tf.reduce_mean(real_err - fake_err)
-        gen_err = tf.reduce_mean(fake_err)
+        real_err = self.critic(self.real_images)
+        fake_err = self.critic(self.generated_MNIST, reuse_scope=True)
+        self.gen_err = tf.reduce_mean(fake_err)
+        self.critic_err = tf.reduce_mean(real_err) - self.gen_err
 
         # For clipping
         variables = tf.trainable_variables()
@@ -83,8 +50,8 @@ class WGAN:
 
         # Training operations
         self.clipper = [var.assign(tf.clip_by_value(var, clip_rate[0], clip_rate[1])) for var in critic_var]
-        self.train_gen = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(gen_err, var_list=gen_var)
-        self.train_critic = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(critic_err,
+        self.train_gen = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(-self.gen_err, var_list=gen_var)
+        self.train_critic = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(-self.critic_err,
                                                                                             var_list=critic_var)
 
         self.sess.run(tf.global_variables_initializer())
@@ -94,14 +61,15 @@ class WGAN:
         # Train critic first
         critic_loss = 0
         batch_size = len(images)
+        critic_loss = 0
         for critic_epoch in range(critic_loops):
-            input_noise = np.random.uniform(-1.0, 1.0, size=[batch_size, self.input_size])
-            critic_loss = self.sess.run(self.train_critic, feed_dict={self.input_noise: input_noise, self.real_images: images})
-            self.sess.run(self.clipper)
-
+            input_noise = np.random.uniform(0, 1.0, size=[batch_size, self.input_size])
+            _, _, critic_loss = self.sess.run([self.train_critic, self.clipper, self.critic_err],
+                                              feed_dict={self.input_noise: input_noise, self.real_images: images})
         # train generator
-        input_noise = np.random.normal(-1.0, 1.0, size=[batch_size, self.input_size])
-        return critic_loss, self.sess.run(self.train_gen, feed_dict={self.input_noise: input_noise})
+        input_noise = np.random.uniform(0, 1.0, size=[batch_size, self.input_size])
+        _, gen_loss = self.sess.run([self.train_gen, self.gen_err], feed_dict={self.input_noise: input_noise})
+        return float(critic_loss), float(gen_loss)
 
     # Generates an image
     def generate_image(self, num_images):
