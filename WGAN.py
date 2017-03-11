@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
 import MLP
+import bilinear
 
 mnist = input_data.read_data_sets('../data/', one_hot=True)
 
@@ -127,7 +128,7 @@ class WGAN(object):
 
 try:
     sess = tf.Session()
-    model = WGAN(sess=sess, pic_samples=pic_samples, generator=MLP.generator, critic=MLP.critic)
+    model = WGAN(sess=sess, pic_samples=pic_samples, generator=bilinear.generator, critic=bilinear.critic)
     model.train()
 except (KeyboardInterrupt, SystemExit, SystemError):
     get_loss(crit_loss_arr, gen_loss_arr)
