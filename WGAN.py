@@ -11,7 +11,7 @@ mnist = input_data.read_data_sets('../data/', one_hot=True)
 
 crit_loss_arr = []
 gen_loss_arr = []
-pic_samples = 4
+pic_samples = 3
 
 
 def get_loss(crit_loss, gen_loss):
@@ -130,7 +130,7 @@ class WGAN(object):
 
 try:
     sess = tf.Session()
-    model = WGAN(sess=sess, pic_samples=pic_samples, generator=bilinear.generator, critic=bilinear.critic)
+    model = WGAN(sess=sess, pic_samples=pic_samples, generator=MLP.generator, critic=MLP.critic)
     model.train()
 except (KeyboardInterrupt, SystemExit, SystemError):
     get_loss(crit_loss_arr, gen_loss_arr)
