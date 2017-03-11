@@ -13,8 +13,6 @@ gen_loss_arr = []
 pic_samples = 4
 
 
-
-
 def get_loss(crit_loss, gen_loss):
     plt.figure(1)
     plt.subplot(211)
@@ -59,7 +57,7 @@ class WGAN(object):
                  input_dims=784,
                  output_dims=10,
                  crit_train=5,
-                 clip_val = 0.01,
+                 clip_val=0.01,
                  pic_samples=3,
                  generator=None,
                  critic=None):
