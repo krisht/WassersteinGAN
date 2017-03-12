@@ -52,7 +52,7 @@ def random_noise(m, n):
 
 class WGAN(object):
     def __init__(self, sess,
-                 l_rate=1e-4,
+                 l_rate=5e-5,
                  n_iter=100000,
                  batch_size=16,
                  input_dims=784,
@@ -130,7 +130,8 @@ class WGAN(object):
 
 try:
     sess = tf.Session()
-    model = WGAN(sess=sess, pic_samples=pic_samples, generator=MLP.generator, critic=MLP.critic)
+    model = WGAN(sess=sess, pic_samples=pic_samples, generator=bilinear.generator, critic=bilinear.critic, n_iter=50000)
     model.train()
+    get_loss(crit_loss_arr, gen_loss_arr)
 except (KeyboardInterrupt, SystemExit, SystemError):
     get_loss(crit_loss_arr, gen_loss_arr)
