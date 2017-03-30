@@ -82,14 +82,14 @@ class WGAN(object):
 
         self.crit_loss = tf.reduce_mean(self.crit_real) - tf.reduce_mean(self.crit_fake)
         self.gen_loss = -tf.reduce_mean(self.crit_fake)
-        fuck_this = tf.trainable_variables()
-        gen_var = [x for x in fuck_this if 'gen' in x.name]
-        crit_var = [x for x in fuck_this if 'crit' in x.name]
+        train_vars = tf.trainable_variables()
+        gen_var = [x for x in train_vars if 'gen' in x.name]
+        crit_var = [x for x in train_vars if 'crit' in x.name]
         self.crit_optim = (tf.train.RMSPropOptimizer(learning_rate=self.l_rate)) \
             .minimize(-self.crit_loss, var_list=crit_var)
         self.gen_optim = (tf.train.RMSPropOptimizer(learning_rate=self.l_rate)) \
             .minimize(self.gen_loss, var_list=gen_var)
-        self.crit_clipper = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in crit_var]
+        self.crit_clipper = [p.assign(tf.clip_by_value(p, -clip_val, clip_val)) for p in crit_var]
 
         self.temp_crit_loss = 0
         self.temp_gen_loss = 0
@@ -134,3 +134,4 @@ try:
     model.train()
 except (KeyboardInterrupt, SystemExit, SystemError):
     get_loss(crit_loss_arr, gen_loss_arr)
+get_loss(crit_loss_arr, gen_loss_arr)
